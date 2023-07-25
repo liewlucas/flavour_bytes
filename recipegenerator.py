@@ -3,9 +3,9 @@
 from cgitb import text
 import tkinter as tk
 from tkinter import ttk
-
 from transformers import FlaxAutoModelForSeq2SeqLM
 from transformers import AutoTokenizer
+import pandas as pd 
 
 
 MODEL_NAME_OR_PATH = "flax-community/t5-recipe-generation"
@@ -84,6 +84,24 @@ def generation_function(texts):
     )
     return generated_recipe
 
+# Provide the path to your dataset CSV file and the column name for ingredients
+dataset_csv_file_path = "combined_recipes.csv"  # Replace with the actual path to your CSV file
+ingredient_column_name = "ingredients"  # Replace with the actual column name in your CSV that contains the ingredients
+
+# Read the dataset CSV file and extract valid items
+df = pd.read_csv(dataset_csv_file_path)
+dataset_items = df[ingredient_column_name].str.lower().tolist()
+
+
+def is_input_in_dataset(input_items, dataset_items):
+    input_items = [item.strip().lower() for item in input_items]
+    dataset_items = [item.strip().lower() for item in dataset_items] 
+
+    for input_item in input_items:
+        for dataset_item in dataset_items:
+            if input_item in dataset_item:              #check for match in ingredients list from csv
+                return True
+    return False
 
 
 def on_ok_click():
@@ -95,42 +113,50 @@ def on_ok_click():
     input_paragraph = input_text.get("1.0", tk.END) #get input
     items.append(input_paragraph) #append into items list
 
-    # Run the generation_function with the updated 'items' list
-    generated = generation_function(items)
-    for text in generated:
-        sections = text.split("\n")
-        for section in sections:
-            section = section.strip()
-            if section.startswith("title:"):    #replace the headers from the generated text (applys to title, ingredients and directions)
-                section = section.replace("title:", "")
-                headline = "RECIPE"
-            elif section.startswith("ingredients:"):
-                section = section.replace("ingredients:", "")
-                headline = "INGREDIENTS"
-            elif section.startswith("directions:"):
-                section = section.replace("directions:", "")
-                headline = "DIRECTIONS"
-            
-            #this is to append all replacements and the information together
-            if headline == "RECIPE":
-                title = f"[{headline}]: {section.strip().capitalize()}\n"
-                topline = "-" * 30 
-                bottomline = "-" * 30
-                #outputlist.append(topline)
-                outputlist.append(title)
-                #outputlist.append(bottomline)
+    if not is_input_in_dataset(items,dataset_items):
+        output_text.config(state='normal')
+        output_text.delete("1.0", tk.END)
+        output_text.insert(tk.END, "Apologies, one or more of your ingredient(s) is invalid") #give friendly message if theres an invalid input from user
+        output_text.config(state='disabled')
+        return
+    
+    else:
+        # Run the generation_function with the updated 'items' list
+        generated = generation_function(items)
+        for text in generated:
+            sections = text.split("\n")
+            for section in sections:
+                section = section.strip()
+                if section.startswith("title:"):    #replace the headers from the generated text (applys to title, ingredients and directions)
+                    section = section.replace("title:", "")
+                    headline = "RECIPE"
+                elif section.startswith("ingredients:"):
+                    section = section.replace("ingredients:", "")
+                    headline = "INGREDIENTS"
+                elif section.startswith("directions:"):
+                    section = section.replace("directions:", "")
+                    headline = "DIRECTIONS"
+                
+                #this is to append all replacements and the information together
+                if headline == "RECIPE":
+                    title = f"[{headline}]: {section.strip().capitalize()}\n"
+                    topline = "-" * 30 
+                    bottomline = "-" * 30
+                    #outputlist.append(topline)
+                    outputlist.append(title)
+                    #outputlist.append(bottomline)
 
-            else:
-                section_info = [f"  - {i+1}: {info.strip().capitalize()}" for i, info in enumerate(section.split("--"))] #splits each instruction / ingredient by the "--" seperator in the generated.
-                recipe = f"[{headline}]:\n" + "\n".join(section_info) +"\n" #joining the headline and the info
-                outputlist.append(recipe) #appending each item, such as title, ingredients, direction and its respective info into a list
+                else:
+                    section_info = [f"  - {i+1}: {info.strip().capitalize()}" for i, info in enumerate(section.split("--"))] #splits each instruction / ingredient by the "--" seperator in the generated.
+                    recipe = f"[{headline}]:\n" + "\n".join(section_info) +"\n" #joining the headline and the info
+                    outputlist.append(recipe) #appending each item, such as title, ingredients, direction and its respective info into a list
 
-    # Format and display the generated recipe
-    outputrecipe = "\n".join(outputlist) # concatenate each section with a line separator
-    output_text.config(state='normal')  # Set the state to normal to enable editing temporarily
-    output_text.delete("1.0", tk.END)  # Clear previous content
-    output_text.insert(tk.END, outputrecipe) #insert fully joined recipe 
-    output_text.config(state='disabled')  # Set the state back to disabled to make it read-only again
+        # Format and display the generated recipe
+        outputrecipe = "\n".join(outputlist) # concatenate each section with a line separator
+        output_text.config(state='normal')  # Set the state to normal to enable editing temporarily
+        output_text.delete("1.0", tk.END)  # Clear previous content
+        output_text.insert(tk.END, outputrecipe) #insert fully joined recipe 
+        output_text.config(state='disabled')  # Set the state back to disabled to make it read-only again
 
 
 def on_exit_click():
