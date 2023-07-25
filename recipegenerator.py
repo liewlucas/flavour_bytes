@@ -98,30 +98,44 @@ def is_input_in_dataset(input_items, dataset_items):
     dataset_items = [item.strip().lower() for item in dataset_items] 
 
     for input_item in input_items:
+        found = False
         for dataset_item in dataset_items:
-            if input_item in dataset_item:              #check for match in ingredients list from csv
-                return True
-    return False
+            if input_item in dataset_item:
+                found = True
+                break
+        if not found:
+            return False
+
+    return True
+
 
 
 def on_ok_click():
     # Initialize the items list to an empty list
     items = []
+    itemscheck = []
     headline=""
     outputlist = []
+
     # Get the input text from the Text widget and split it into a list
     input_paragraph = input_text.get("1.0", tk.END) #get input
-    items.append(input_paragraph) #append into items list
+    individualingredients = input_paragraph.split(",")
 
-    if not is_input_in_dataset(items,dataset_items):
+     # Clean up the individual ingredients and add them to the 'items' list
+    itemscheck.extend([ingredient.strip() for ingredient in individualingredients])
+
+
+    if not is_input_in_dataset(itemscheck, dataset_items):
         output_text.config(state='normal')
         output_text.delete("1.0", tk.END)
         output_text.insert(tk.END, "Apologies, one or more of your ingredient(s) is invalid") #give friendly message if theres an invalid input from user
         output_text.config(state='disabled')
         return
+
     
     else:
         # Run the generation_function with the updated 'items' list
+        items.append(input_paragraph) #append into items list
         generated = generation_function(items)
         for text in generated:
             sections = text.split("\n")
