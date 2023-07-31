@@ -1,4 +1,3 @@
-
 # Import recipe generation function and other required libraries 
 from cgitb import text
 import tkinter as tk
@@ -6,6 +5,9 @@ from tkinter import ttk
 from transformers import FlaxAutoModelForSeq2SeqLM
 from transformers import AutoTokenizer
 import pandas as pd 
+import random
+import nltk
+from nltk.translate.meteor_score import meteor_score
 
 
 MODEL_NAME_OR_PATH = "flax-community/t5-recipe-generation"
@@ -84,6 +86,50 @@ def generation_function(texts):
     )
     return generated_recipe
 
+def meteor_evaluation(ground_truth_recipes, generated_recipes):         #meteor evalutation function
+    meteor_scores = []
+
+    for gt_recipe, gen_recipe in zip(ground_truth_recipes, generated_recipes):
+        # Tokenize each recipe into lists of strings (steps)
+        gt_tokens = gt_recipe.split()
+        gen_tokens = gen_recipe.split()
+
+        meteor_score_value = meteor_score([gt_tokens], gen_tokens)
+        meteor_scores.append(meteor_score_value)
+
+    return sum(meteor_scores) / len(meteor_scores)
+
+def find_matching_instructions(user_input):
+    # Provide the path to your dataset CSV file and the column name for ingredients and instructions
+    dataset_csv_file_path = "combined_recipes.csv"  
+    ingredient_column_name = "ingredients"  
+    instructions_column_name = "instructions"  
+
+    # Read the dataset CSV file
+    df = pd.read_csv(dataset_csv_file_path)
+
+    # Convert user_input and ingredients in the DataFrame to lowercase for case-insensitive matching
+    user_input = [item.lower().strip() for item in user_input]
+    df[ingredient_column_name] = df[ingredient_column_name].str.lower().str.strip()
+
+    # Initialize a list to store matching instructions
+    matching_instructions = []
+
+    for item in user_input:
+        # Find rows where the item is present in the ingredients column
+        matches = df[df[ingredient_column_name].str.contains(item)]
+
+        # Append the matching instructions to the list
+        matching_instructions.extend(matches[instructions_column_name].tolist())
+
+    # If there are more than 10 matching instructions, randomly select 10
+    # if len(matching_instructions) > 10:
+    #     matching_instructions = random.sample(matching_instructions, 10)
+    
+    #print(matching_instructions)
+
+    return matching_instructions
+
 # Provide the path to your dataset CSV file and the column name for ingredients
 dataset_csv_file_path = "combined_recipes.csv"  # Replace with the actual path to your CSV file
 ingredient_column_name = "ingredients"  # Replace with the actual column name in your CSV that contains the ingredients
@@ -135,8 +181,10 @@ def on_ok_click():
     
     else:
         # Run the generation_function with the updated 'items' list
+        directionslist = []
         items.append(input_paragraph) #append into items list
         generated = generation_function(items)
+        matchinginstructions = find_matching_instructions(input_paragraph) #call the matching instruction function for ground truth used in meteor testing
         for text in generated:
             sections = text.split("\n")
             for section in sections:
@@ -150,6 +198,10 @@ def on_ok_click():
                 elif section.startswith("directions:"):
                     section = section.replace("directions:", "")
                     headline = "DIRECTIONS"
+                    directionslist.append(section)
+                    print(directionslist)
+                    #newdirectionlist = "".join(directionslist)
+                    
                 
                 #this is to append all replacements and the information together
                 if headline == "RECIPE":
@@ -164,6 +216,7 @@ def on_ok_click():
                     section_info = [f"  - {i+1}: {info.strip().capitalize()}" for i, info in enumerate(section.split("--"))] #splits each instruction / ingredient by the "--" seperator in the generated.
                     recipe = f"[{headline}]:\n" + "\n".join(section_info) +"\n" #joining the headline and the info
                     outputlist.append(recipe) #appending each item, such as title, ingredients, direction and its respective info into a list
+                    
 
         # Format and display the generated recipe
         outputrecipe = "\n".join(outputlist) # concatenate each section with a line separator
@@ -171,6 +224,11 @@ def on_ok_click():
         output_text.delete("1.0", tk.END)  # Clear previous content
         output_text.insert(tk.END, outputrecipe) #insert fully joined recipe 
         output_text.config(state='disabled')  # Set the state back to disabled to make it read-only again
+        meteor_score_avg = meteor_evaluation(matchinginstructions,directionslist)
+        #print(outputlist[2])
+        #print(f"METEOR Score: {meteor_score_avg:.4f}")
+        meteorscore = f"METEOR Score: {meteor_score_avg:.4f}"
+        score_label.config(text=meteorscore)
 
 
 def on_exit_click():
@@ -200,6 +258,9 @@ output_label.pack(pady=2)
 
 output_text = tk.Text(main_frame, wrap=tk.WORD, width=80, height=20, state="disabled")
 output_text.pack(pady=5)
+
+score_label = ttk.Label(main_frame, text='METEOR SCORE: ')
+score_label.pack(pady=2)
 
 # Centering the buttons in a new frame
 button_frame = ttk.Frame(main_frame)
